@@ -231,15 +231,21 @@ void MMGMIDI::inputAdded(const libremidi::input_port &port)
 {
 	QString port_name = QString::fromStdString(port.port_name);
 
-	MMGDevice *adding_device = manager(device)->find(port_name);
-	if (!adding_device) {
-		adding_device = manager(device)->add(port_name);
-		blog(LOG_INFO, QString("Device <%1> detected.").arg(port_name));
-	}
+       MMGDevice *adding_device = manager(device)->find(port_name);
+       if (!adding_device) {
+	       adding_device = manager(device)->add(port_name);
+	       blog(LOG_INFO, QString("Device <%1> detected.").arg(port_name));
+       }
 
-	adding_device->in_port_info = port;
-	adding_device->setCapable(TYPE_INPUT, true);
-	emit deviceCapableChange();
+       adding_device->in_port_info = port;
+       adding_device->setCapable(TYPE_INPUT, true);
+
+       // Restore previous input port open state if available
+       if (devicePortStates.contains(port_name) && devicePortStates[port_name].inputOpen) {
+	       adding_device->openPort(TYPE_INPUT);
+       }
+
+       emit deviceCapableChange();
 }
 
 void MMGMIDI::inputRemoved(const libremidi::input_port &port)
@@ -248,6 +254,10 @@ void MMGMIDI::inputRemoved(const libremidi::input_port &port)
 
 	MMGDevice *removing_device = manager(device)->find(port_name);
 	if (!removing_device) return;
+
+	// Save input port open state before removal
+	devicePortStates[port_name].inputOpen = removing_device->isPortOpen(TYPE_INPUT);
+
 	removing_device->setCapable(TYPE_INPUT, false);
 
 	if (!removing_device->isCapable(TYPE_NONE)) return;
@@ -260,15 +270,21 @@ void MMGMIDI::outputAdded(const libremidi::output_port &port)
 {
 	QString port_name = QString::fromStdString(port.port_name);
 
-	MMGDevice *adding_device = manager(device)->find(port_name);
-	if (!adding_device) {
-		adding_device = manager(device)->add(port_name);
-		blog(LOG_INFO, QString("Device <%1> detected.").arg(port_name));
-	}
+       MMGDevice *adding_device = manager(device)->find(port_name);
+       if (!adding_device) {
+	       adding_device = manager(device)->add(port_name);
+	       blog(LOG_INFO, QString("Device <%1> detected.").arg(port_name));
+       }
 
-	adding_device->out_port_info = port;
-	adding_device->setCapable(TYPE_OUTPUT, true);
-	emit deviceCapableChange();
+       adding_device->out_port_info = port;
+       adding_device->setCapable(TYPE_OUTPUT, true);
+
+       // Restore previous output port open state if available
+       if (devicePortStates.contains(port_name) && devicePortStates[port_name].outputOpen) {
+	       adding_device->openPort(TYPE_OUTPUT);
+       }
+
+       emit deviceCapableChange();
 }
 
 void MMGMIDI::outputRemoved(const libremidi::output_port &port)
@@ -277,6 +293,10 @@ void MMGMIDI::outputRemoved(const libremidi::output_port &port)
 
 	MMGDevice *removing_device = manager(device)->find(port_name);
 	if (!removing_device) return;
+
+	// Save output port open state before removal
+	devicePortStates[port_name].outputOpen = removing_device->isPortOpen(TYPE_OUTPUT);
+
 	removing_device->setCapable(TYPE_OUTPUT, false);
 
 	if (!removing_device->isCapable(TYPE_NONE)) return;

@@ -92,6 +92,13 @@ signals:
 private:
 	libremidi::observer observer;
 
+	// Store previous port open states for devices by name
+	struct PortState {
+		 bool inputOpen = false;
+		 bool outputOpen = false;
+	};
+	QMap<QString, PortState> devicePortStates;
+
 	void inputAdded(const libremidi::input_port &port);
 	void inputRemoved(const libremidi::input_port &port);
 	void outputAdded(const libremidi::output_port &port);

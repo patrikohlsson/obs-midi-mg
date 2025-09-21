@@ -34,6 +34,7 @@ public:
 
 	MMGMIDIPort *device() const { return _device; };
 	void setDevice(MMGMIDIPort *device);
+	QString deviceName() const { return _deviceName; };
 
 	MMGUtils::MMGNumber &channel() { return _channel; };
 	MMGUtils::MMGString &type() { return _type; };
@@ -67,6 +68,7 @@ private:
 	MMGUtils::MMGNumber _value;
 
 	MMGMIDIPort *_device = nullptr;
+	QString _deviceName; // Store the device name for hot-swap support
 
 	void setRanges();
 };

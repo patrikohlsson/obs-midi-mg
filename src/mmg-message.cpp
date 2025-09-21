@@ -54,7 +54,9 @@ MMGMessage::MMGMessage(const QJsonObject &json_obj)
 
 	setObjectName(json_obj["name"].toString(mmgtr("Message.Untitled")));
 
-	setDevice(manager(device)->find(json_obj["device"].toString()));
+	// Store the device name before trying to set the device
+	_deviceName = json_obj["device"].toString();
+	setDevice(manager(device)->find(_deviceName));
 
 	if (_channel == 0) _channel = 1;
 
@@ -73,12 +75,33 @@ MMGMessage::MMGMessage(const QJsonObject &json_obj)
 
 void MMGMessage::setDevice(MMGMIDIPort *device)
 {
-	if (_device) disconnect(_device, &QObject::destroyed, this, nullptr);
+	if (_device) {
+		// Disconnect from old device
+		disconnect(_device, &QObject::destroyed, this, nullptr);
+	}
 
 	_device = device;
 	if (!device) return;
 
-	connect(_device, &QObject::destroyed, this, [&]() { _device = nullptr; });
+	// Connect to new device and handle destruction
+	connect(_device, &QObject::destroyed, this, [&]() {
+		// When device is destroyed, clear the pointer
+		_device = nullptr;
+		
+		// Try to re-find the device by name if it was hot-swapped
+		QString deviceName = _deviceName;
+		if (!deviceName.isEmpty() && manager(device)) {
+			MMGMIDIPort *newDevice = manager(device)->find(deviceName);
+			if (newDevice) {
+				// Found the device with the same name - reconnect
+				_device = newDevice;
+				connect(_device, &QObject::destroyed, this, [&]() { _device = nullptr; });
+			}
+		}
+	});
+	
+	// Store the device name for later reconnection if needed
+	_deviceName = device->objectName();
 }
 
 void MMGMessage::blog(int log_status, const QString &message) const
@@ -89,7 +112,8 @@ void MMGMessage::blog(int log_status, const QString &message) const
 void MMGMessage::json(QJsonObject &message_obj) const
 {
 	message_obj["name"] = objectName();
-	message_obj["device"] = _device ? _device->objectName() : "";
+	// Use stored device name if available, otherwise use the current device's name or empty string
+	message_obj["device"] = _device ? _device->objectName() : (!_deviceName.isEmpty() ? _deviceName : "");
 	_channel.json(message_obj, "channel");
 	_type.json(message_obj, "type");
 	_note.json(message_obj, "note");
@@ -100,6 +124,7 @@ void MMGMessage::copy(MMGMessage *dest) const
 {
 	dest->setObjectName(objectName());
 	dest->_device = _device;
+	dest->_deviceName = _deviceName; // Copy the stored device name
 	dest->_channel = _channel.copy();
 	dest->_type = _type.copy();
 	dest->_note = _note.copy();
