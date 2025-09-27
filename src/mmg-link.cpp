@@ -19,6 +19,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "mmg-link.h"
 #include "mmg-binding.h"
 #include "mmg-midi.h"
+#include "mmg-device.h"
+#include "mmg-config.h"
 
 using namespace MMGUtils;
 
@@ -36,16 +38,48 @@ void MMGLink::blog(int log_status, const QString &message) const
 
 void MMGLink::establish(bool _connect)
 {
+	// Get the message before the switch
+	MMGMessage* firstMessage = nullptr;
+	
 	switch (binding->type()) {
 		case TYPE_INPUT:
 		default:
-			if (!binding->messages(0)->device()) break;
+			// Check if we have a message and it has a device
+			firstMessage = binding->messages(0);
+			if (!firstMessage) break;
+			
+			// If the device is null but we have a device name, try to find the device again
+			if (!firstMessage->device() && !firstMessage->deviceName().isEmpty()) {
+				// Look for the device by name
+				MMGMIDIPort* foundDevice = nullptr;
+				MMGConfig* cfg = config();
+				if (cfg) {
+					for (MMGDevice* dev : *cfg->devices()) {
+						if (dev->objectName() == firstMessage->deviceName() && dev->isActive(TYPE_INPUT)) {
+							foundDevice = dev;
+							break;
+						}
+					}
+				}
+				
+				// If found, set it as the device for this message
+				if (foundDevice) {
+					blog(LOG_INFO, QString("Reconnecting to hot-swapped device: %1")
+						.arg(foundDevice->objectName()));
+					firstMessage->setDevice(foundDevice);
+				}
+			}
+			
+			// Now try to connect if we have a device
+			if (!firstMessage->device()) {
+				break;
+			}
 
 			if (_connect) {
-				connect(binding->messages(0)->device(), &MMGMIDIPort::messageReceived, this,
+				connect(firstMessage->device(), &MMGMIDIPort::messageReceived, this,
 					&MMGLink::messageReceived, Qt::UniqueConnection);
 			} else {
-				disconnect(binding->messages(0)->device(), &MMGMIDIPort::messageReceived, this,
+				disconnect(firstMessage->device(), &MMGMIDIPort::messageReceived, this,
 					   &MMGLink::messageReceived);
 			}
 			break;
@@ -128,7 +162,9 @@ void MMGLink::executeOutput()
 void MMGLink::messageReceived(const MMGSharedMessage &incoming)
 {
 	MMGMessage *checked_message = binding->messages(0);
-	if (!checked_message->acceptable(incoming.get())) return;
+	if (!checked_message->acceptable(incoming.get())) {
+		return;
+	}
 
 	if (binding->actions()->size() < 1) {
 		blog(LOG_INFO, "FAILED: No actions to execute!");

@@ -18,6 +18,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "mmg-device.h"
 #include "mmg-config.h"
+#include "mmg-binding.h"
+#include "mmg-message.h"
 
 using namespace MMGUtils;
 
@@ -36,8 +38,22 @@ void MMGDevice::json(QJsonObject &device_obj) const
 
 void MMGDevice::update(const QJsonObject &json_obj)
 {
-	setActive(TYPE_INPUT, json_obj["active"].toInt() & 0b01);
-	setActive(TYPE_OUTPUT, json_obj["active"].toInt() & 0b10);
+	// Store the active state we want to set
+	uint activeState = json_obj["active"].toInt();
+		
+	// Apply the active states
+	if (activeState & 0b01) {
+		setActive(TYPE_INPUT, true);
+	} else {
+		setActive(TYPE_INPUT, false);
+	}
+	
+	if (activeState & 0b10) {
+		setActive(TYPE_OUTPUT, true);
+	} else {
+		setActive(TYPE_OUTPUT, false);
+	}
+	
 	_thru = json_obj["thru"].toString();
 }
 
@@ -78,6 +94,34 @@ void MMGDevice::setActive(DeviceType type, bool active)
 		default:
 			break;
 	}
+	
+	// If we're activating a device, check for any bindings that might use this device
+	// and refresh their connections
+	if (active) {
+		// Get all collections
+		MMGConfig *cfg = config();
+		if (cfg) {
+			// Refresh any bindings that might use this device
+			for (MMGBindingManager *collection : *cfg->collections()) {
+				for (MMGBinding *binding : *collection) {
+					// Check if this binding uses this device
+					bool needsRefresh = false;
+					
+					// Check the first message's device name
+					if (binding->messages()->size() > 0) {
+						MMGMessage *message = binding->messages(0);
+						if (message && message->deviceName() == objectName()) {
+							needsRefresh = true;
+						}
+					}
+					
+					if (needsRefresh) {
+						binding->refresh();
+					}
+				}
+			}
+		}
+	}
 }
 
 void MMGDevice::checkCapable()
@@ -109,14 +153,80 @@ void MMGDevice::checkCapable()
 // MMGDeviceManager
 MMGDevice *MMGDeviceManager::add(const QJsonObject &json_obj)
 {
-	MMGDevice *current_device = find(json_obj["name"].toString());
+	QString deviceName = json_obj["name"].toString();
+	MMGDevice *current_device = find(deviceName);
 
 	if (current_device) {
 		current_device->update(json_obj);
+		// After updating an existing device, refresh all bindings that use it
+		refreshBindingsForDevice(deviceName);
 		return current_device;
 	} else {
 		if (find(mmgtr("Device.Dummy"))) remove(find(mmgtr("Device.Dummy")));
-		return MMGManager::add(new MMGDevice(this, json_obj));
+		
+		// Create new device
+		MMGDevice *newDevice = new MMGDevice(this, json_obj);
+		
+		// Add the device to our manager
+		MMGManager::add(newDevice);
+		
+		// Update all message references that might be using this device name
+		updateDeviceReferences(deviceName, newDevice);
+		
+		// After adding a new device, refresh all bindings that would use it
+		refreshBindingsForDevice(deviceName);
+		
+		return newDevice;
+	}
+}
+
+void MMGDeviceManager::updateDeviceReferences(const QString &deviceName, MMGDevice *newDevice)
+{
+	// Get access to the global config to iterate through all collections and bindings
+	MMGConfig *cfg = config();
+	if (!cfg) return;
+	
+	// Iterate through all collections
+	for (MMGBindingManager *collection : *cfg->collections()) {
+		// Iterate through all bindings in this collection
+		for (MMGBinding *binding : *collection) {
+			// Iterate through all messages in this binding
+			for (MMGMessage *message : *binding->messages()) {
+				// If the message has an empty device or the device name matches,
+				// update to point to the new device
+				if (!message->device() || (message->device() && message->device()->objectName() == deviceName)) {
+					message->setDevice(newDevice);
+				}
+			}
+		}
+	}
+}
+
+void MMGDeviceManager::refreshBindingsForDevice(const QString &deviceName)
+{
+	// Get access to the global config to iterate through all collections and bindings
+	MMGConfig *cfg = config();
+	if (!cfg) return;
+	
+	// Iterate through all collections
+	for (MMGBindingManager *collection : *cfg->collections()) {
+		// Iterate through all bindings in this collection
+		for (MMGBinding *binding : *collection) {
+			// Check if this binding uses this device
+			bool needsRefresh = false;
+			
+			// Check all messages in the binding
+			for (MMGMessage *message : *binding->messages()) {
+				if (message->deviceName() == deviceName) {
+					needsRefresh = true;
+					break;
+				}
+			}
+			
+			if (needsRefresh) {
+				binding->refresh();
+			}
+		}
 	}
 }
 

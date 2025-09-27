@@ -115,6 +115,29 @@ void MMGBinding::setConnected(bool _connected)
 void MMGBinding::refresh()
 {
 	setConnected(false);
+	
+	// Check if any messages need their device connections refreshed
+	if (_type == TYPE_INPUT && _messages->size() > 0) {
+		MMGMessage *message = _messages->at(0);
+		if (!message->device() && !message->deviceName().isEmpty()) {
+			// Try to find the device by name
+			MMGMIDIPort *foundDevice = nullptr;
+			MMGConfig *cfg = config();
+			if (cfg) {
+				for (MMGDevice *dev : *cfg->devices()) {
+					if (dev->objectName() == message->deviceName() && dev->isActive(TYPE_INPUT)) {
+						foundDevice = dev;
+						break;
+					}
+				}
+			}
+			
+			if (foundDevice) {
+				message->setDevice(foundDevice);
+			}
+		}
+	}
+	
 	setConnected(true);
 }
 

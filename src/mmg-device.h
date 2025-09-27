@@ -59,6 +59,12 @@ public:
 	MMGDevice *add(const QString &name);
 
 	const QStringList capableDevices(MMGUtils::DeviceType) const;
+	
+	// Updates all messages that reference a device with the given name
+	void updateDeviceReferences(const QString &deviceName, MMGDevice *newDevice);
+	
+	// Refresh all bindings that use a specific device
+	void refreshBindingsForDevice(const QString &deviceName);
 };
 
 #undef MMG_ENABLED
