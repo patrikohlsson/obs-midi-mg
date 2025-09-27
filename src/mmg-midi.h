@@ -90,8 +90,8 @@ signals:
 	void deviceCapableChange();
 
 private:
+	QMap<QString, QMap<MMGUtils::DeviceType, bool>> devicePortStates;
 	libremidi::observer observer;
-
 	void inputAdded(const libremidi::input_port &port);
 	void inputRemoved(const libremidi::input_port &port);
 	void outputAdded(const libremidi::output_port &port);

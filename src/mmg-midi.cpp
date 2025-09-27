@@ -239,6 +239,11 @@ void MMGMIDI::inputAdded(const libremidi::input_port &port)
 
 	adding_device->in_port_info = port;
 	adding_device->setCapable(TYPE_INPUT, true);
+
+	if (devicePortStates.contains(port_name) && devicePortStates[port_name].contains(TYPE_INPUT)) {
+		adding_device->setActive(TYPE_INPUT, devicePortStates[port_name][TYPE_INPUT]);
+	}
+
 	emit deviceCapableChange();
 }
 
@@ -248,6 +253,7 @@ void MMGMIDI::inputRemoved(const libremidi::input_port &port)
 
 	MMGDevice *removing_device = manager(device)->find(port_name);
 	if (!removing_device) return;
+	devicePortStates[port_name][TYPE_INPUT] = removing_device->isActive(TYPE_INPUT);
 	removing_device->setCapable(TYPE_INPUT, false);
 
 	if (!removing_device->isCapable(TYPE_NONE)) return;
@@ -268,6 +274,11 @@ void MMGMIDI::outputAdded(const libremidi::output_port &port)
 
 	adding_device->out_port_info = port;
 	adding_device->setCapable(TYPE_OUTPUT, true);
+
+	if (devicePortStates.contains(port_name) && devicePortStates[port_name].contains(TYPE_OUTPUT)) {
+		adding_device->setActive(TYPE_OUTPUT, devicePortStates[port_name][TYPE_OUTPUT]);
+	}
+
 	emit deviceCapableChange();
 }
 
@@ -277,6 +288,7 @@ void MMGMIDI::outputRemoved(const libremidi::output_port &port)
 
 	MMGDevice *removing_device = manager(device)->find(port_name);
 	if (!removing_device) return;
+	devicePortStates[port_name][TYPE_OUTPUT] = removing_device->isActive(TYPE_OUTPUT);
 	removing_device->setCapable(TYPE_OUTPUT, false);
 
 	if (!removing_device->isCapable(TYPE_NONE)) return;
